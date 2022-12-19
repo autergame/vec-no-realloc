@@ -108,11 +108,14 @@ impl<T> VecNoRealloc<T> {
 
         *current = SomeBox!(new);
     }
-    pub fn pop(&mut self) -> Option<T> {
+    pub fn pop_del(&mut self, remove: bool) -> Option<T> {
         let mut current = &mut self.head;
 
         if let Some(node) = current {
             if node.last == 0 {
+                if remove {
+                    *current = None;
+                }
                 return None;
             }
         }
@@ -122,6 +125,9 @@ impl<T> VecNoRealloc<T> {
                 if next.last != 0 {
                     current = &mut node.next;
                     continue;
+                }
+                if remove {
+                    node.next = None;
                 }
             }
             node.last -= 1;
@@ -133,6 +139,28 @@ impl<T> VecNoRealloc<T> {
                 let end = ptr.add(node.last);
                 end.read()
             });
+        }
+
+        None
+    }
+    #[inline(always)]
+    pub fn pop(&mut self) -> Option<T> {
+        self.pop_del(false)
+    }
+    pub fn get(&self, index: usize) -> Option<&T> {
+        let mut search = index;
+        let mut current = &self.head;
+
+        while let Some(node) = current {
+            if search < self.bucket_size {
+                if search >= node.last {
+                    break;
+                }
+                return Some(&node.list[search]);
+            }
+            search -= self.bucket_size;
+
+            current = &node.next;
         }
 
         None

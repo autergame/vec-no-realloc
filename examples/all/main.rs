@@ -53,12 +53,20 @@ fn main() {
     for i in 0..9 {
         test[i] *= 3;
     }
-    println!("{}", test);
+    
+	for i in 0..16 {
+		print!("{:?} ", test.get(i));
+	}
+    println!();
 
     for i in 0..10 {
         test.push(i);
     }
-    println!("{}", test);
+
+	for i in 0..25 {
+		print!("{:?} ", test[i]);
+	}
+    println!();
 
     for i in 5..20 {
         test[i] *= 4;
@@ -67,14 +75,17 @@ fn main() {
 
     let topop = test.len() + 1;
     for i in 0..topop {
-        print!("{:?}", test.pop());
+		if (i % 5) == 0 {
+			println!();
+			println!("{:?}", test);
+			println!();
+		}
+        print!("{:?}", test.pop_del(true));
         if i < topop - 1 {
             print!(", ");
         }
     }
     println!();
-
-    println!("{}", test);
 
     println!("{:#?}", test);
 }

@@ -82,7 +82,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
                 // reference to the same index more than once
                 return Some(unsafe {
                     let ptr = &mut node.list[search];
-                    &mut *(ptr as *mut _)
+                    &mut *(ptr as *mut T)
                 });
             }
             search -= self.vnr.bucket_size;

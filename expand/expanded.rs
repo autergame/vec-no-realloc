@@ -59,7 +59,7 @@ mod index {
             let mut current = &self.head;
             while let Some(node) = current {
                 if search < self.bucket_size {
-                    if search > node.last {
+                    if search >= node.last {
                         break;
                     }
                     return &node.list[search];
@@ -76,7 +76,7 @@ mod index {
             let mut current = &mut self.head;
             while let Some(node) = current {
                 if search < self.bucket_size {
-                    if search > node.last {
+                    if search >= node.last {
                         break;
                     }
                     return &mut node.list[search];
@@ -154,7 +154,7 @@ mod iter {
                     self.index += 1;
                     return Some(unsafe {
                         let ptr = &mut node.list[search];
-                        &mut *(ptr as *mut _)
+                        &mut *(ptr as *mut T)
                     });
                 }
                 search -= self.vnr.bucket_size;
@@ -197,7 +197,7 @@ mod node {
         T: std::fmt::Debug,
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("VNRNode")
+            f.debug_struct("Node")
                 .field("list", &self.list)
                 .field("last", &self.last)
                 .field("next", &self.next)
@@ -295,10 +295,13 @@ impl<T> VecNoRealloc<T> {
         new.last = 1;
         *current = Some(Box::new(new));
     }
-    pub fn pop(&mut self) -> Option<T> {
+    pub fn pop_del(&mut self, remove: bool) -> Option<T> {
         let mut current = &mut self.head;
         if let Some(node) = current {
             if node.last == 0 {
+                if remove {
+                    *current = None;
+                }
                 return None;
             }
         }
@@ -308,6 +311,9 @@ impl<T> VecNoRealloc<T> {
                     current = &mut node.next;
                     continue;
                 }
+                if remove {
+                    node.next = None;
+                }
             }
             node.last -= 1;
             return Some(unsafe {
@@ -315,6 +321,25 @@ impl<T> VecNoRealloc<T> {
                 let end = ptr.add(node.last);
                 end.read()
             });
+        }
+        None
+    }
+    #[inline(always)]
+    pub fn pop(&mut self) -> Option<T> {
+        self.pop_del(false)
+    }
+    pub fn get(&self, index: usize) -> Option<&T> {
+        let mut search = index;
+        let mut current = &self.head;
+        while let Some(node) = current {
+            if search < self.bucket_size {
+                if search >= node.last {
+                    break;
+                }
+                return Some(&node.list[search]);
+            }
+            search -= self.bucket_size;
+            current = &node.next;
         }
         None
     }

@@ -9,7 +9,7 @@ impl<T> std::ops::Index<usize> for VecNoRealloc<T> {
 
         while let Some(node) = current {
             if search < self.bucket_size {
-                if search > node.last {
+                if search >= node.last {
                     break;
                 }
                 return &node.list[search];
@@ -30,7 +30,7 @@ impl<T> std::ops::IndexMut<usize> for VecNoRealloc<T> {
 
         while let Some(node) = current {
             if search < self.bucket_size {
-                if search > node.last {
+                if search >= node.last {
                     break;
                 }
                 return &mut node.list[search];

@@ -32,7 +32,7 @@ where
     T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VNRNode")
+        f.debug_struct("Node")
             .field("list", &self.list)
             .field("last", &self.last)
             .field("next", &self.next)
