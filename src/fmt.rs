@@ -5,10 +5,17 @@ where
     T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VecNoRealloc")
-            .field("bucket_size", &self.bucket_size)
-            .field("head", &self.head)
-            .finish()
+        let ds = &mut f.debug_struct("VecNoRealloc");
+
+        ds.field("bucket_size", &self.bucket_size);
+
+        if let Some(head) = &self.head {
+            ds.field("head", head);
+        } else {
+            ds.field("head", &self.head);
+        }
+
+        ds.finish()
     }
 }
 
@@ -19,21 +26,24 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "[")?;
 
-        self.iterate(|node| {
+        let mut current = &self.head;
+
+        while let Some(node) = current {
             if node.last > 0 {
                 for i in 0..node.last {
-                    write!(f, "{}", node.list[i]).unwrap();
+                    write!(f, "{}", node.list[i])?;
                     if i < node.last - 1 {
-                        write!(f, ", ").unwrap();
+                        write!(f, ", ")?;
                     }
                 }
             }
             if let Some(next) = &node.next {
                 if next.last != 0 {
-                    write!(f, ", ").unwrap();
+                    write!(f, ", ")?;
                 }
             }
-        });
+            current = &node.next;
+        }
 
         write!(f, "]")
     }

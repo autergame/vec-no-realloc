@@ -1,6 +1,6 @@
 extern crate vec_no_realloc;
 
-use vec_no_realloc::{VecNoRealloc, vnr};
+use vec_no_realloc::{vnr, VecNoRealloc};
 
 fn main() {
     let test3: VecNoRealloc<u32> = vnr![];
@@ -46,40 +46,53 @@ fn main() {
     println!();
 
     for item in &mut test {
-        *item *= 2;
+        *item += 2;
     }
     println!("{}", test);
 
     for i in 0..9 {
         test[i] *= 3;
     }
-    
-	for i in 0..16 {
-		print!("{:?} ", test.get(i));
-	}
+
+    for i in 0..16 {
+        print!("{:?} ", test.get(i));
+    }
     println!();
+
+    for i in 0..16 {
+        if let Some(item) = test.get_mut(i) {
+            *item += 4;
+        }
+    }
+    println!("{}", test);
+
+    test.reserve(5);
+    print!("before len: {} capacity: {} ", test.len(), test.capacity());
+
+    test.reserve(15);
+    println!("after len: {} capacity: {}", test.len(), test.capacity());
 
     for i in 0..10 {
         test.push(i);
     }
 
-	for i in 0..25 {
-		print!("{:?} ", test[i]);
-	}
+    for i in 0..25 {
+        print!("{:?} ", test[i]);
+    }
     println!();
 
     for i in 5..20 {
         test[i] *= 4;
     }
-    println!("{}", test);
+    println!("{:#?}", test);
 
     let topop = test.len() + 1;
     for i in 0..topop {
-		if (i % 5) == 0 {
-			println!();
-			println!("{:?}", test);
-			println!();
-		}
+        if (i % 5) == 0 {
+            println!();
+            println!("{:?}", test);
+            println!();
+        }
         print!("{:?}", test.pop_del(true));
         if i < topop - 1 {
             print!(", ");

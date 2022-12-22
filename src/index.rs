@@ -4,42 +4,20 @@ impl<T> std::ops::Index<usize> for VecNoRealloc<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        let mut search = index;
-        let mut current = &self.head;
-
-        while let Some(node) = current {
-            if search < self.bucket_size {
-                if search >= node.last {
-                    break;
-                }
-                return &node.list[search];
-            }
-            search -= self.bucket_size;
-
-            current = &node.next;
+        if let Some(item) = self.get(index) {
+            item
+        } else {
+            panic!("index out of bounds")
         }
-
-        panic!("index out of bounds")
     }
 }
 
 impl<T> std::ops::IndexMut<usize> for VecNoRealloc<T> {
     fn index_mut(&mut self, index: usize) -> &mut T {
-        let mut search = index;
-        let mut current = &mut self.head;
-
-        while let Some(node) = current {
-            if search < self.bucket_size {
-                if search >= node.last {
-                    break;
-                }
-                return &mut node.list[search];
-            }
-            search -= self.bucket_size;
-
-            current = &mut node.next;
+        if let Some(item) = self.get_mut(index) {
+            item
+        } else {
+            panic!("index out of bounds")
         }
-
-        panic!("index out of bounds")
     }
 }

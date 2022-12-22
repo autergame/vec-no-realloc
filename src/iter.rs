@@ -24,23 +24,9 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut search = self.index;
-        let mut current = &self.vnr.head;
-
-        while let Some(node) = current {
-            if search < self.vnr.bucket_size {
-                if search >= node.last {
-                    break;
-                }
-                self.index += 1;
-                return Some(&node.list[search]);
-            }
-            search -= self.vnr.bucket_size;
-
-            current = &node.next;
-        }
-
-        None
+        let item = self.vnr.get(self.index);
+        self.index += 1;
+        item
     }
 }
 
@@ -68,28 +54,14 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut search = self.index;
-        let mut current = &mut self.vnr.head;
-
-        while let Some(node) = current {
-            if search < self.vnr.bucket_size {
-                if search >= node.last {
-                    break;
-                }
-                self.index += 1;
-                // SAFETY:
-                // this will never return a mutable
-                // reference to the same index more than once
-                return Some(unsafe {
-                    let ptr = &mut node.list[search];
-                    &mut *(ptr as *mut T)
-                });
-            }
-            search -= self.vnr.bucket_size;
-
-            current = &mut node.next;
+        if let Some(item) = self.vnr.get_mut(self.index) {
+            // SAFETY:
+            // this will never return a mutable
+            // reference to the same index more than once
+            self.index += 1;
+            Some(unsafe { &mut *(item as *mut T) })
+        } else {
+            None
         }
-
-        None
     }
 }

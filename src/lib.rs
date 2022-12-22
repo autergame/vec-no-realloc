@@ -15,27 +15,29 @@ impl<T> VecNoRealloc<T> {
             head: None,
         }
     }
-    pub fn with_capacity(size: usize) -> Self
-    where
-        T: Default + Clone,
-    {
+
+    pub fn with_capacity(size: usize) -> Self {
+        let bucket_size = size.max(2);
         Self {
-            bucket_size: size,
-            head: SomeBox!(node::Node::with_capacity(size)),
+            bucket_size,
+            head: SomeBox!(node::Node::with_capacity(bucket_size)),
         }
     }
+
     pub fn from_elem(elem: T, size: usize) -> Self
     where
         T: Clone,
     {
+        let bucket_size = size.max(2);
         Self {
-            bucket_size: size,
-            head: SomeBox!(node::Node::from_elem(elem, size)),
+            bucket_size,
+            head: SomeBox!(node::Node::from_elem(elem, bucket_size)),
         }
     }
+
     pub fn from_slice(slice: &[T]) -> Self
     where
-        T: Default + Clone,
+        T: Clone,
     {
         let mut vnr = Self {
             bucket_size: 10,
@@ -50,53 +52,60 @@ impl<T> VecNoRealloc<T> {
 
         vnr
     }
-    pub(crate) fn iterate<'a, F>(&'a self, mut f: F)
-    where
-        F: FnMut(&'a node::Node<T>),
-    {
+
+    pub fn len(&self) -> usize {
+        let mut count = 0;
         let mut current = &self.head;
 
         while let Some(node) = current {
-            f(node);
+            count += node.last;
 
             current = &node.next;
         }
-    }
-    pub fn len(&self) -> usize {
-        let mut count = 0;
-
-        self.iterate(|node| {
-            count += node.last;
-        });
 
         count
     }
+
     pub fn capacity(&self) -> usize {
         let mut count = 0;
+        let mut current = &self.head;
 
-        self.iterate(|_| {
+        while let Some(node) = current {
             count += self.bucket_size;
-        });
+
+            current = &node.next;
+        }
 
         count
     }
-    pub fn push(&mut self, item: T)
-    where
-        T: Default + Clone,
-    {
+
+    pub fn reserve(&mut self, additional: usize) {
+        let capacity = self.capacity();
+        let to_add = self.len() + additional;
+
+        if to_add > capacity {
+            let count = ((to_add - capacity) as f32 / self.bucket_size as f32).ceil() as usize;
+            let mut current = &mut self.head;
+
+            for _ in 0..count {
+                while let Some(node) = current {
+                    current = &mut node.next;
+                }
+                *current = SomeBox!(node::Node::<T>::with_capacity(self.bucket_size));
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn push(&mut self, item: T) {
         let mut current = &mut self.head;
 
         while let Some(node) = current {
             if node.last < self.bucket_size {
-                // SAFETY:
-                // this will only overwrite a
-                // unused item in list, needed for pop
-                unsafe {
-                    let ptr = node.list.as_mut_ptr();
-                    let end = ptr.add(node.last);
-                    end.write(item);
-                }
-                node.last += 1;
+                node.push(item);
                 return;
             }
             current = &mut node.next;
@@ -108,17 +117,9 @@ impl<T> VecNoRealloc<T> {
 
         *current = SomeBox!(new);
     }
+
     pub fn pop_del(&mut self, remove: bool) -> Option<T> {
         let mut current = &mut self.head;
-
-        if let Some(node) = current {
-            if node.last == 0 {
-                if remove {
-                    *current = None;
-                }
-                return None;
-            }
-        }
 
         while let Some(node) = current {
             if let Some(next) = &node.next {
@@ -130,23 +131,23 @@ impl<T> VecNoRealloc<T> {
                     node.next = None;
                 }
             }
-            node.last -= 1;
-            // SAFETY:
-            // this will never return a ownership to the same
-            // index more than once and will be marked as unused
-            return Some(unsafe {
-                let ptr = node.list.as_ptr();
-                let end = ptr.add(node.last);
-                end.read()
-            });
+            if node.last == 0 {
+                if remove {
+                    self.head = None;
+                }
+                return None;
+            }
+            return Some(node.pop());
         }
 
         None
     }
+
     #[inline(always)]
     pub fn pop(&mut self) -> Option<T> {
         self.pop_del(false)
     }
+
     pub fn get(&self, index: usize) -> Option<&T> {
         let mut search = index;
         let mut current = &self.head;
@@ -165,34 +166,105 @@ impl<T> VecNoRealloc<T> {
 
         None
     }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        let mut search = index;
+        let mut current = &mut self.head;
+
+        while let Some(node) = current {
+            if search < self.bucket_size {
+                if search >= node.last {
+                    break;
+                }
+                return Some(&mut node.list[search]);
+            }
+            search -= self.bucket_size;
+
+            current = &mut node.next;
+        }
+
+        None
+    }
+
+    pub fn clear_del(&mut self) {
+        self.head = None;
+    }
+
+    pub fn clear(&mut self) {
+        let mut current = &mut self.head;
+
+        while let Some(node) = current {
+            node.last = 0;
+
+            current = &mut node.next;
+        }
+    }
+
+    pub fn append(&mut self, other: &mut Self) {
+        for _ in 0..other.len() {
+            self.push(other.pop().unwrap());
+        }
+    }
+
+    pub fn append_clone(&mut self, other: &Self)
+    where
+        T: Clone,
+    {
+        for item in other {
+            self.push(item.clone());
+        }
+    }
+
+    pub fn append_vec(&mut self, vector: Vec<T>) {
+        for item in vector {
+            self.push(item);
+        }
+    }
+
+    pub fn append_vec_clone(&mut self, vector: &Vec<T>)
+    where
+        T: Clone,
+    {
+        for item in vector {
+            self.push(item.clone());
+        }
+    }
+
     pub fn to_vec(&self) -> Vec<T>
     where
         T: Clone,
     {
         let mut vector = Vec::with_capacity(self.len());
+        let mut current = &self.head;
 
-        self.iterate(|node| {
+        while let Some(node) = current {
             for i in 0..node.last {
                 vector.push(node.list[i].clone());
             }
-        });
+            current = &node.next;
+        }
 
         vector
     }
+
     pub fn to_vec_ref(&self) -> Vec<&T> {
         let mut vector = Vec::with_capacity(self.len());
+        let mut current = &self.head;
 
-        self.iterate(|node| {
+        while let Some(node) = current {
             for i in 0..node.last {
                 vector.push(&node.list[i]);
             }
-        });
+            current = &node.next;
+        }
 
         vector
     }
+
     pub fn iter(&self) -> iter::Iter<'_, T> {
         iter::Iter::new(self)
     }
+
     pub fn iter_mut(&mut self) -> iter::IterMut<'_, T> {
         iter::IterMut::new(self)
     }
