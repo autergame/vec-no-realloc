@@ -81,6 +81,20 @@ fn main() {
     }
     println!();
 
+    print!("first {:?} ", test.first());
+
+    if let Some(item) = test.first_mut() {
+        *item += 4;
+    }
+
+    println!("last {:?}", test.last());
+
+    if let Some(item) = test.last_mut() {
+        *item += 8;
+    }
+
+    println!("{}", test);
+
     for i in 5..20 {
         test[i] *= 4;
     }
@@ -93,7 +107,7 @@ fn main() {
             println!("{:?}", test);
             println!();
         }
-        print!("{:?}", test.pop_del(true));
+        print!("{:?}", test.pop());
         if i < topop - 1 {
             print!(", ");
         }

@@ -3,9 +3,12 @@ mod index;
 mod iter;
 mod node;
 
+#[macro_use]
+mod macros;
+
 pub struct VecNoRealloc<T> {
-    pub(crate) bucket_size: usize,
-    pub(crate) head: Option<Box<node::Node<T>>>,
+    bucket_size: usize,
+    head: Option<Box<node::Node<T>>>,
 }
 
 impl<T> VecNoRealloc<T> {
@@ -39,14 +42,11 @@ impl<T> VecNoRealloc<T> {
     where
         T: Clone,
     {
-        let mut vnr = Self {
-            bucket_size: 10,
-            head: None,
-        };
+        let mut vnr = Self::new();
 
         for chunk in slice.chunks(vnr.bucket_size) {
-            for i in 0..chunk.len() {
-                vnr.push(chunk[i].clone());
+            for item in chunk {
+                vnr.push(item.clone());
             }
         }
 
@@ -79,12 +79,18 @@ impl<T> VecNoRealloc<T> {
         count
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn reserve(&mut self, additional: usize) {
         let capacity = self.capacity();
         let to_add = self.len() + additional;
 
         if to_add > capacity {
-            let count = ((to_add - capacity) as f32 / self.bucket_size as f32).ceil() as usize;
+            let diff = to_add - capacity;
+            let count = (diff as f32 / self.bucket_size as f32).ceil() as usize;
+
             let mut current = &mut self.head;
 
             for _ in 0..count {
@@ -94,10 +100,6 @@ impl<T> VecNoRealloc<T> {
                 *current = SomeBox!(node::Node::<T>::with_capacity(self.bucket_size));
             }
         }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     pub fn push(&mut self, item: T) {
@@ -118,8 +120,15 @@ impl<T> VecNoRealloc<T> {
         *current = SomeBox!(new);
     }
 
-    pub fn pop_del(&mut self, remove: bool) -> Option<T> {
+    pub fn pop_del(&mut self) -> Option<T> {
         let mut current = &mut self.head;
+
+        if let Some(node) = current {
+            if node.last == 0 {
+                self.head = None;
+                return None;
+            }
+        }
 
         while let Some(node) = current {
             if let Some(next) = &node.next {
@@ -127,15 +136,7 @@ impl<T> VecNoRealloc<T> {
                     current = &mut node.next;
                     continue;
                 }
-                if remove {
-                    node.next = None;
-                }
-            }
-            if node.last == 0 {
-                if remove {
-                    self.head = None;
-                }
-                return None;
+                node.next = None;
             }
             return Some(node.pop());
         }
@@ -143,9 +144,52 @@ impl<T> VecNoRealloc<T> {
         None
     }
 
-    #[inline(always)]
     pub fn pop(&mut self) -> Option<T> {
-        self.pop_del(false)
+        let mut current = &mut self.head;
+
+        if let Some(node) = current {
+            if node.last == 0 {
+                return None;
+            }
+        }
+
+        while let Some(node) = current {
+            if let Some(next) = &node.next {
+                if next.last != 0 {
+                    current = &mut node.next;
+                    continue;
+                }
+            }
+            return Some(node.pop());
+        }
+
+        None
+    }
+
+    pub fn first(&self) -> Option<&T> {
+        if let Some(head) = &self.head {
+            if head.last != 0 {
+                return Some(&head.list[0]);
+            }
+        }
+        None
+    }
+
+    pub fn first_mut(&mut self) -> Option<&mut T> {
+        if let Some(head) = &mut self.head {
+            if head.last != 0 {
+                return Some(&mut head.list[0]);
+            }
+        }
+        None
+    }
+
+    pub fn last(&self) -> Option<&T> {
+        self.get(self.len() - 1)
+    }
+
+    pub fn last_mut(&mut self) -> Option<&mut T> {
+        self.get_mut(self.len() - 1)
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
@@ -270,22 +314,8 @@ impl<T> VecNoRealloc<T> {
     }
 }
 
-#[macro_export]
-macro_rules! SomeBox {
-    ($x:expr) => {
-        Some(Box::new($x))
-    };
+impl<T> Default for VecNoRealloc<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
-
-#[macro_export]
-macro_rules! vnr [
-    () => {
-		VecNoRealloc::new()
-	};
-    ($elem:expr; $n:expr) => {
-		VecNoRealloc::from_elem($elem, $n)
-	};
-	($ ($x:expr) , *) => {
-		VecNoRealloc::<_>::from_slice(&[$ ($x) , *])
-    };
-];

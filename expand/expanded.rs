@@ -5,7 +5,27 @@ use ::std::prelude::rust_2015::*;
 #[macro_use]
 extern crate std;
 mod fmt {
+    use crate::node::Node;
     use crate::VecNoRealloc;
+    impl<T> std::fmt::Debug for Node<T>
+    where
+        T: std::fmt::Debug,
+    {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let list: Vec<&T> = self.list.iter().take(self.last).collect();
+            let ds = &mut f.debug_struct("Node");
+            ds.field("list", &list);
+            ds.field("last", &self.last);
+            ds.field(
+                "next",
+                match &self.next {
+                    Some(next) => next,
+                    None => &None::<()>,
+                },
+            );
+            ds.finish()
+        }
+    }
     impl<T> std::fmt::Debug for VecNoRealloc<T>
     where
         T: std::fmt::Debug,
@@ -13,11 +33,13 @@ mod fmt {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let ds = &mut f.debug_struct("VecNoRealloc");
             ds.field("bucket_size", &self.bucket_size);
-            if let Some(head) = &self.head {
-                ds.field("head", head);
-            } else {
-                ds.field("head", &self.head);
-            }
+            ds.field(
+                "head",
+                match &self.head {
+                    Some(head) => head,
+                    None => &None::<()>,
+                },
+            );
             ds.finish()
         }
     }
@@ -58,20 +80,12 @@ mod index {
     impl<T> std::ops::Index<usize> for VecNoRealloc<T> {
         type Output = T;
         fn index(&self, index: usize) -> &Self::Output {
-            if let Some(item) = self.get(index) {
-                item
-            } else {
-                { ::std::rt::begin_panic("index out of bounds") }
-            }
+            self.get(index).expect("index out of bounds")
         }
     }
     impl<T> std::ops::IndexMut<usize> for VecNoRealloc<T> {
         fn index_mut(&mut self, index: usize) -> &mut T {
-            if let Some(item) = self.get_mut(index) {
-                item
-            } else {
-                { ::std::rt::begin_panic("index out of bounds") }
-            }
+            self.get_mut(index).expect("index out of bounds")
         }
     }
 }
@@ -97,7 +111,9 @@ mod iter {
         type Item = &'a T;
         fn next(&mut self) -> Option<Self::Item> {
             let item = self.vnr.get(self.index);
-            self.index += 1;
+            if item.is_some() {
+                self.index += 1;
+            }
             item
         }
     }
@@ -120,30 +136,31 @@ mod iter {
     impl<'a, T> Iterator for IterMut<'a, T> {
         type Item = &'a mut T;
         fn next(&mut self) -> Option<Self::Item> {
-            if let Some(item) = self.vnr.get_mut(self.index) {
-                self.index += 1;
-                Some(unsafe { &mut *(item as *mut T) })
-            } else {
-                None
+            match self.vnr.get_mut(self.index) {
+                Some(item) => {
+                    self.index += 1;
+                    Some(unsafe { &mut *(item as *mut T) })
+                }
+                None => None,
             }
         }
     }
 }
 mod node {
     pub(crate) struct Node<T> {
-        pub(crate) list: Vec<T>,
-        pub(crate) last: usize,
-        pub(crate) next: Option<Box<Node<T>>>,
+        pub list: Vec<T>,
+        pub last: usize,
+        pub next: Option<Box<Node<T>>>,
     }
     impl<T> Node<T> {
-        pub(crate) fn with_capacity(capacity: usize) -> Self {
+        pub fn with_capacity(capacity: usize) -> Self {
             Self {
                 list: vec_with_size(capacity),
                 last: 0,
                 next: None,
             }
         }
-        pub(crate) fn from_elem(elem: T, size: usize) -> Self
+        pub fn from_elem(elem: T, size: usize) -> Self
         where
             T: Clone,
         {
@@ -153,7 +170,7 @@ mod node {
                 next: None,
             }
         }
-        pub(crate) fn push(&mut self, item: T) {
+        pub fn push(&mut self, item: T) {
             unsafe {
                 let ptr = self.list.as_mut_ptr();
                 let end = ptr.add(self.last);
@@ -161,30 +178,13 @@ mod node {
             }
             self.last += 1;
         }
-        pub(crate) fn pop(&mut self) -> T {
+        pub fn pop(&mut self) -> T {
             self.last -= 1;
             unsafe {
                 let ptr = self.list.as_ptr();
                 let end = ptr.add(self.last);
                 end.read()
             }
-        }
-    }
-    impl<T> std::fmt::Debug for Node<T>
-    where
-        T: std::fmt::Debug,
-    {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let list: Vec<&T> = self.list.iter().take(self.last).collect();
-            let ds = &mut f.debug_struct("Node");
-            ds.field("list", &list);
-            ds.field("last", &self.last);
-            if let Some(next) = &self.next {
-                ds.field("next", next);
-            } else {
-                ds.field("next", &self.next);
-            }
-            ds.finish()
         }
     }
     impl<T> Drop for Node<T> {
@@ -194,6 +194,7 @@ mod node {
             }
         }
     }
+    #[allow(clippy::uninit_vec)]
     fn vec_with_size<T>(size: usize) -> Vec<T> {
         let mut vec = Vec::with_capacity(size);
         unsafe {
@@ -202,9 +203,11 @@ mod node {
         vec
     }
 }
+#[macro_use]
+mod macros {}
 pub struct VecNoRealloc<T> {
-    pub(crate) bucket_size: usize,
-    pub(crate) head: Option<Box<node::Node<T>>>,
+    bucket_size: usize,
+    head: Option<Box<node::Node<T>>>,
 }
 impl<T> VecNoRealloc<T> {
     pub fn new() -> Self {
@@ -234,13 +237,10 @@ impl<T> VecNoRealloc<T> {
     where
         T: Clone,
     {
-        let mut vnr = Self {
-            bucket_size: 10,
-            head: None,
-        };
+        let mut vnr = Self::new();
         for chunk in slice.chunks(vnr.bucket_size) {
-            for i in 0..chunk.len() {
-                vnr.push(chunk[i].clone());
+            for item in chunk {
+                vnr.push(item.clone());
             }
         }
         vnr
@@ -263,12 +263,15 @@ impl<T> VecNoRealloc<T> {
         }
         count
     }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     pub fn reserve(&mut self, additional: usize) {
         let capacity = self.capacity();
         let to_add = self.len() + additional;
         if to_add > capacity {
-            let count = ((to_add - capacity) as f32 / self.bucket_size as f32).ceil()
-                as usize;
+            let diff = to_add - capacity;
+            let count = (diff as f32 / self.bucket_size as f32).ceil() as usize;
             let mut current = &mut self.head;
             for _ in 0..count {
                 while let Some(node) = current {
@@ -279,9 +282,6 @@ impl<T> VecNoRealloc<T> {
                 );
             }
         }
-    }
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
     pub fn push(&mut self, item: T) {
         let mut current = &mut self.head;
@@ -297,31 +297,65 @@ impl<T> VecNoRealloc<T> {
         new.last = 1;
         *current = Some(Box::new(new));
     }
-    pub fn pop_del(&mut self, remove: bool) -> Option<T> {
+    pub fn pop_del(&mut self) -> Option<T> {
         let mut current = &mut self.head;
+        if let Some(node) = current {
+            if node.last == 0 {
+                self.head = None;
+                return None;
+            }
+        }
         while let Some(node) = current {
             if let Some(next) = &node.next {
                 if next.last != 0 {
                     current = &mut node.next;
                     continue;
                 }
-                if remove {
-                    node.next = None;
-                }
-            }
-            if node.last == 0 {
-                if remove {
-                    self.head = None;
-                }
-                return None;
+                node.next = None;
             }
             return Some(node.pop());
         }
         None
     }
-    #[inline(always)]
     pub fn pop(&mut self) -> Option<T> {
-        self.pop_del(false)
+        let mut current = &mut self.head;
+        if let Some(node) = current {
+            if node.last == 0 {
+                return None;
+            }
+        }
+        while let Some(node) = current {
+            if let Some(next) = &node.next {
+                if next.last != 0 {
+                    current = &mut node.next;
+                    continue;
+                }
+            }
+            return Some(node.pop());
+        }
+        None
+    }
+    pub fn first(&self) -> Option<&T> {
+        if let Some(head) = &self.head {
+            if head.last != 0 {
+                return Some(&head.list[0]);
+            }
+        }
+        None
+    }
+    pub fn first_mut(&mut self) -> Option<&mut T> {
+        if let Some(head) = &mut self.head {
+            if head.last != 0 {
+                return Some(&mut head.list[0]);
+            }
+        }
+        None
+    }
+    pub fn last(&self) -> Option<&T> {
+        self.get(self.len() - 1)
+    }
+    pub fn last_mut(&mut self) -> Option<&mut T> {
+        self.get_mut(self.len() - 1)
     }
     pub fn get(&self, index: usize) -> Option<&T> {
         let mut search = index;
@@ -419,5 +453,10 @@ impl<T> VecNoRealloc<T> {
     }
     pub fn iter_mut(&mut self) -> iter::IterMut<'_, T> {
         iter::IterMut::new(self)
+    }
+}
+impl<T> Default for VecNoRealloc<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

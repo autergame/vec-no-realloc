@@ -25,7 +25,9 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let item = self.vnr.get(self.index);
-        self.index += 1;
+        if item.is_some() {
+            self.index += 1;
+        }
         item
     }
 }
@@ -54,14 +56,15 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(item) = self.vnr.get_mut(self.index) {
-            // SAFETY:
-            // this will never return a mutable
-            // reference to the same index more than once
-            self.index += 1;
-            Some(unsafe { &mut *(item as *mut T) })
-        } else {
-            None
+        match self.vnr.get_mut(self.index) {
+            Some(item) => {
+                // SAFETY:
+                // this will never return a mutable
+                // reference to the same index more than once
+                self.index += 1;
+                Some(unsafe { &mut *(item as *mut T) })
+            }
+            None => None,
         }
     }
 }
